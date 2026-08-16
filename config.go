@@ -1,3 +1,4 @@
+// config.go
 package main
 
 import (
@@ -21,18 +22,24 @@ type Profile struct {
 }
 
 // ConfigFile represents the on-disk JSON structure containing
-// one or more named profiles and an optional default.
+// one or more named profiles, an optional default profile, and
+// an optional top-level defaults section.
+//
+// The "defaults" section provides shared values that apply to all
+// profiles unless overridden by the profile itself or a command-
+// line flag.
 type ConfigFile struct {
+	Defaults       *Profile           `json:"defaults"`
 	Profiles       map[string]Profile `json:"profiles"`
 	DefaultProfile string             `json:"default_profile"`
 }
 
 // RuntimeConfig is the merged configuration used during execution.
-// It combines built-in defaults, config file values, and command-line
-// flags according to the resolution priority:
+// It combines built-in defaults, config file defaults, profile
+// values, and command-line flags according to the resolution priority:
 //  1. Command-line flags (highest)
 //  2. Named profile from config file
-//  3. Default profile from config file
+//  3. Config file "defaults" section
 //  4. Built-in defaults (lowest)
 type RuntimeConfig struct {
 	Subcommand   string // "push", "pull", or "list"
@@ -126,13 +133,51 @@ func loadConfigFile(path string) (*ConfigFile, error) {
 	return &cf, nil
 }
 
-// resolveConfig merges defaults, config file values, and explicit flag
-// values into a single RuntimeConfig ready for execution.
+// resolveConfig merges built-in defaults, config file defaults,
+// profile values, and explicit flag values into a single
+// RuntimeConfig ready for execution.
+//
+// Resolution priority (highest to lowest):
+//  1. Command-line flags
+//  2. Named profile from config file
+//  3. Config file "defaults" section
+//  4. Built-in constants (merge/skip/proton-drive)
 func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 	// Load config file
 	cf, err := loadConfigFile(configFilePath(rt.ConfigPath))
 	if err != nil {
 		return nil, err
+	}
+
+	// Start with built-in defaults
+	result := &RuntimeConfig{
+		Subcommand:   rt.Subcommand,
+		DirConflict:  defaultDirConflict,
+		FileConflict: defaultFileConflict,
+		ProtonExe:    defaultProtonExe,
+		Explicit:     rt.Explicit,
+		ConfigPath:   rt.ConfigPath,
+		ProfileName:  rt.ProfileName,
+	}
+
+	// Layer 1: Apply config file "defaults" section
+	if cf.Defaults != nil {
+		if cf.Defaults.DirConflict != "" {
+			result.DirConflict = cf.Defaults.DirConflict
+		}
+		if cf.Defaults.FileConflict != "" {
+			result.FileConflict = cf.Defaults.FileConflict
+		}
+		if cf.Defaults.BrowserPath != "" {
+			result.BrowserPath = cf.Defaults.BrowserPath
+		}
+		if cf.Defaults.ProtonExe != "" {
+			result.ProtonExe = cf.Defaults.ProtonExe
+		}
+		// Verbose defaults to false; only inherit if explicitly true
+		if cf.Defaults.Verbose {
+			result.Verbose = cf.Defaults.Verbose
+		}
 	}
 
 	// Determine which profile to use
@@ -156,41 +201,33 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 		}
 	}
 
-	// Apply built-in defaults first
-	result := &RuntimeConfig{
-		Subcommand:   rt.Subcommand,
-		DirConflict:  defaultDirConflict,
-		FileConflict: defaultFileConflict,
-		ProtonExe:    defaultProtonExe,
-		Explicit:     rt.Explicit,
-		ConfigPath:   rt.ConfigPath,
-		ProfileName:  rt.ProfileName,
-	}
-
-	// Layer on config file profile values (if found)
+	// Layer 2: Apply profile values (override config file defaults)
 	if profileFound {
-		if !rt.Explicit.Source && profile.Source != "" {
+		if profile.Source != "" {
 			result.Source = profile.Source
 		}
-		if !rt.Explicit.Destination && profile.Destination != "" {
+		if profile.Destination != "" {
 			result.Destination = profile.Destination
 		}
-		if !rt.Explicit.DirConflict && profile.DirConflict != "" {
+		if profile.DirConflict != "" {
 			result.DirConflict = profile.DirConflict
 		}
-		if !rt.Explicit.FileConflict && profile.FileConflict != "" {
+		if profile.FileConflict != "" {
 			result.FileConflict = profile.FileConflict
 		}
-		if !rt.Explicit.BrowserPath && profile.BrowserPath != "" {
+		if profile.BrowserPath != "" {
 			result.BrowserPath = profile.BrowserPath
 		}
-		if !rt.Explicit.ProtonExe && profile.ProtonExe != "" {
+		if profile.ProtonExe != "" {
 			result.ProtonExe = profile.ProtonExe
 		}
-		result.Verbose = profile.Verbose
+		// Profile verbose only inherits if not explicitly set by flag
+		if profile.Verbose {
+			result.Verbose = profile.Verbose
+		}
 	}
 
-	// Layer on explicit command-line flags (override everything)
+	// Layer 3: Apply explicit command-line flags (override everything)
 	if rt.Explicit.Source {
 		result.Source = rt.Source
 	}
