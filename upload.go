@@ -253,9 +253,10 @@ func doPull(cfg *RuntimeConfig) error {
 	src := cfg.Remote
 	dest := cfg.Local
 
-	// Ensure the local destination directory exists
-	if err := os.MkdirAll(dest, 0755); err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+	// Create parent directory only — let proton-drive create the leaf folder
+	parent := filepath.Dir(dest)
+	if err := os.MkdirAll(parent, 0755); err != nil {
+		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
 	fmt.Printf("=== Pulling %s → %s ===\n", src, dest)
