@@ -1,0 +1,19 @@
+// protonshift.json — example configuration
+{
+    "profiles": {
+        "dcim": {
+            "source": "D:\\DCIM",
+            "destination": "/my-files",
+            "dir_conflict": "merge",
+            "file_conflict": "skip",
+            "binary": ".\\proton-drive.exe"
+        },
+        "projects": {
+            "source": "C:\\Users\\Lee\\Projects",
+            "destination": "/my-files/projects-backup",
+            "dir_conflict": "merge",
+            "file_conflict": "skip"
+        }
+    },
+    "default_profile": "dcim"
+}
