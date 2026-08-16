@@ -3,9 +3,11 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 )
 
 // batchSize controls how many files are passed to a single
@@ -50,6 +52,11 @@ func pushDirectory(cfg *RuntimeConfig) error {
 	baseRemote := cfg.Remote
 
 	fmt.Printf("=== Pushing %s → %s ===\n", baseLocal, baseRemote)
+
+	// Create the base remote folder before processing subdirectories.
+	if err := createRemoteFolder(cfg, baseRemote); err != nil {
+		return fmt.Errorf("failed to create base remote folder %s: %w", baseRemote, err)
+	}
 
 	entries, err := os.ReadDir(baseLocal)
 	if err != nil {
@@ -116,6 +123,15 @@ func pushSubdirectory(cfg *RuntimeConfig, localPath, remotePath, name string) er
 		}
 	}
 
+	// Create the remote folder before uploading files to it.
+	// When passing individual file paths (instead of a glob),
+	// proton-drive does not auto-create the parent folder.
+	if len(files) > 0 || len(nestedDirs) > 0 {
+		if err := createRemoteFolder(cfg, remotePath); err != nil {
+			return fmt.Errorf("failed to create remote folder %s: %w", remotePath, err)
+		}
+	}
+
 	// Upload files in this directory in batches
 	if len(files) > 0 {
 		if err := uploadFilesInBatches(cfg, localPath, files, remotePath); err != nil {
@@ -135,6 +151,37 @@ func pushSubdirectory(cfg *RuntimeConfig, localPath, remotePath, name string) er
 		}
 	}
 
+	return nil
+}
+
+// createRemoteFolder creates a folder on Proton Drive at the given
+// remote path. It first splits the path into parent and name, then
+// calls `proton-drive filesystem create-folder parentPath name`.
+// If the folder already exists, the error is ignored (merge behavior).
+func createRemoteFolder(cfg *RuntimeConfig, remotePath string) error {
+	// Split remote path into parent and name
+	idx := strings.LastIndex(remotePath, "/")
+	if idx <= 0 || idx == len(remotePath)-1 {
+		// Can't split root or malformed path — skip folder creation
+		return nil
+	}
+
+	parent := remotePath[:idx]
+	name := remotePath[idx+1:]
+
+	args := []string{
+		"filesystem", "create-folder",
+		parent, name,
+	}
+
+	cmd := exec.Command(cfg.ProtonExe, args...)
+	cmd.Stdout = io.Discard
+	cmd.Stderr = io.Discard
+	cmd.Run()
+
+	// Ignore errors — if the folder already exists, that's fine.
+	// If it genuinely can't be created, the upload will fail with
+	// a more descriptive error anyway.
 	return nil
 }
 
@@ -242,7 +289,7 @@ func doList(cfg *RuntimeConfig) error {
 }
 
 // runProtonDrive executes the proton-drive CLI with the given
-// arguments. Output is streamed to the terminal in real-time.
+// arguments. Output is streamed directly to the terminal.
 func runProtonDrive(cfg *RuntimeConfig, args []string) error {
 	cmd := exec.Command(cfg.ProtonExe, args...)
 
