@@ -46,8 +46,8 @@ ProtonShift defaults to calling `proton-drive` from your PATH. If your binary is
 
 ## Usage
 
-    protonshift push <source> <destination> [flags]
-    protonshift pull <source> <destination> [flags]
+    protonshift push <local> <remote> [flags]
+    protonshift pull <remote> <local> [flags]
     protonshift list <path> [flags]
 
 ### Examples
@@ -71,6 +71,7 @@ List remote contents:
 Use a saved profile:
 
     protonshift push --profile dcim
+    protonshift pull --profile dcim
 
 Use profile with a flag override:
 
@@ -110,12 +111,12 @@ ProtonShift looks for a JSON config file in the following locations (first match
         },
         "profiles": {
             "dcim": {
-                "source": "D:/DCIM",
-                "destination": "/my-files"
+                "local": "D:/DCIM",
+                "remote": "/my-files"
             },
             "projects": {
-                "source": "C:/Users/Lee/Projects",
-                "destination": "/my-files/projects-backup",
+                "local": "C:/Users/Lee/Projects",
+                "remote": "/my-files/projects-backup",
                 "file_conflict": "overwrite"
             }
         },
@@ -135,15 +136,15 @@ Configuration values are resolved in the following order (highest priority first
 
 | Field           | Profile key     | Description                              |
 |-----------------|-----------------|------------------------------------------|
-| source          | source          | Local path (push) or remote path (pull)  |
-| destination     | destination     | Remote path (push) or local path (pull)  |
+| local           | local           | Local path (push: source, pull: dest)   |
+| remote          | remote          | Remote path (push: dest, pull: source)  |
 | dir_conflict    | dir_conflict    | Directory conflict strategy              |
 | file_conflict   | file_conflict   | File conflict strategy                   |
 | browser         | browser         | Browser executable path for auth         |
 | binary          | binary          | Path to proton-drive CLI executable      |
 | verbose         | verbose         | Show raw CLI output (true/false)         |
 
-The `defaults` section accepts all the same fields except `source` and `destination`. Profiles inherit from `defaults` and can override any field.
+The `defaults` section accepts all the same fields except `local` and `remote`. Profiles inherit from `defaults` and can override any field.
 
 ## How EMFILE protection works
 
@@ -200,7 +201,7 @@ If EMFILE errors persist on your system, decrease this value. Typical safe range
     ├── go.mod                   # Module definition
     └── protonshift.json.example # Example config file
 
-## Acknowledgments
+## Acknowledgment
 
 - Proton AG for the Proton Drive CLI and their broader open-source ecosystem
 

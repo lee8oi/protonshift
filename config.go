@@ -12,8 +12,8 @@ import (
 // Profiles are loaded from a JSON config file and allow the user
 // to run recurring transfers without specifying paths each time.
 type Profile struct {
-	Source       string `json:"source"`
-	Destination  string `json:"destination"`
+	Local        string `json:"local"`
+	Remote       string `json:"remote"`
 	DirConflict  string `json:"dir_conflict"`
 	FileConflict string `json:"file_conflict"`
 	BrowserPath  string `json:"browser"`
@@ -24,10 +24,6 @@ type Profile struct {
 // ConfigFile represents the on-disk JSON structure containing
 // one or more named profiles, an optional default profile, and
 // an optional top-level defaults section.
-//
-// The "defaults" section provides shared values that apply to all
-// profiles unless overridden by the profile itself or a command-
-// line flag.
 type ConfigFile struct {
 	Defaults       *Profile           `json:"defaults"`
 	Profiles       map[string]Profile `json:"profiles"`
@@ -43,8 +39,8 @@ type ConfigFile struct {
 //  4. Built-in defaults (lowest)
 type RuntimeConfig struct {
 	Subcommand   string // "push", "pull", or "list"
-	Source       string
-	Destination  string
+	Local        string
+	Remote       string
 	DirConflict  string
 	FileConflict string
 	BrowserPath  string
@@ -60,8 +56,8 @@ type RuntimeConfig struct {
 // explicitFlags tracks which command-line flags were explicitly set
 // so we know which values should override the config file.
 type explicitFlags struct {
-	Source       bool
-	Destination  bool
+	Local        bool
+	Remote       bool
 	DirConflict  bool
 	FileConflict bool
 	BrowserPath  bool
@@ -174,7 +170,6 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 		if cf.Defaults.ProtonExe != "" {
 			result.ProtonExe = cf.Defaults.ProtonExe
 		}
-		// Verbose defaults to false; only inherit if explicitly true
 		if cf.Defaults.Verbose {
 			result.Verbose = cf.Defaults.Verbose
 		}
@@ -203,11 +198,11 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 
 	// Layer 2: Apply profile values (override config file defaults)
 	if profileFound {
-		if profile.Source != "" {
-			result.Source = profile.Source
+		if profile.Local != "" {
+			result.Local = profile.Local
 		}
-		if profile.Destination != "" {
-			result.Destination = profile.Destination
+		if profile.Remote != "" {
+			result.Remote = profile.Remote
 		}
 		if profile.DirConflict != "" {
 			result.DirConflict = profile.DirConflict
@@ -221,18 +216,17 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 		if profile.ProtonExe != "" {
 			result.ProtonExe = profile.ProtonExe
 		}
-		// Profile verbose only inherits if not explicitly set by flag
 		if profile.Verbose {
 			result.Verbose = profile.Verbose
 		}
 	}
 
 	// Layer 3: Apply explicit command-line flags (override everything)
-	if rt.Explicit.Source {
-		result.Source = rt.Source
+	if rt.Explicit.Local {
+		result.Local = rt.Local
 	}
-	if rt.Explicit.Destination {
-		result.Destination = rt.Destination
+	if rt.Explicit.Remote {
+		result.Remote = rt.Remote
 	}
 	if rt.Explicit.DirConflict {
 		result.DirConflict = rt.DirConflict

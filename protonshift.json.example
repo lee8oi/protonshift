@@ -8,17 +8,12 @@
     },
     "profiles": {
         "dcim": {
-            "source": "D:/DCIM",
-            "destination": "/my-files",
-            "dir_conflict": "merge",
-            "file_conflict": "skip",
-            "browser": "C:/Program Files/Firefox/firefox.exe",
-            "binary": "./proton-drive.exe",
-            "verbose": false
+            "local": "D:/DCIM",
+            "remote": "/my-files"
         },
         "projects": {
-            "source": "C:/Users/Lee/Projects",
-            "destination": "/my-files/projects-backup",
+            "local": "C:/Users/Lee/Projects",
+            "remote": "/my-files/projects-backup",
             "file_conflict": "overwrite",
             "verbose": true
         }

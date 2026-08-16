@@ -12,8 +12,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `protonshift — a wrapper for the Proton Drive CLI
 
 Usage:
-  protonshift push <source> <destination> [flags]
-  protonshift pull <source> <destination> [flags]
+  protonshift push <local> <remote> [flags]
+  protonshift pull <remote> <local> [flags]
   protonshift list <path> [flags]
 
 Subcommands:
@@ -36,6 +36,7 @@ Examples:
   protonshift pull /my-files/docs C:\Downloads
   protonshift list /my-files
   protonshift push --profile dcim
+  protonshift pull --profile dcim
   protonshift push D:\DCIM /my-files --dir-conflict merge --file-conflict skip`)
 }
 
@@ -68,8 +69,6 @@ func main() {
 }
 
 // run executes a subcommand with the given flags.
-// It parses flags, resolves configuration, performs auth if needed,
-// and dispatches to the appropriate operation handler.
 func run(subcommand string, args []string) error {
 	fs := flag.NewFlagSet(subcommand, flag.ExitOnError)
 
@@ -103,7 +102,7 @@ func run(subcommand string, args []string) error {
 	rt.ConfigPath = configPath
 	rt.Verbose = verbose
 
-	// Track explicit flags (non-empty string or flag visited)
+	// Track explicit flags
 	fs.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "dir-conflict":
@@ -119,59 +118,68 @@ func run(subcommand string, args []string) error {
 		}
 	})
 
-	// Handle positional args (source, destination)
+	// Handle positional args
 	// For "list", only one positional arg (path) is expected
-	// For "push"/"pull", two positional args (source, destination) expected
+	// For "push"/"pull", two positional args expected
 	if subcommand == "list" {
 		if len(positional) >= 1 {
-			rt.Source = positional[0]
-			rt.Explicit.Source = true
+			rt.Remote = positional[0]
+			rt.Explicit.Remote = true
 		}
 	} else {
 		if len(positional) >= 1 {
-			rt.Source = positional[0]
-			rt.Explicit.Source = true
+			if subcommand == "push" {
+				rt.Local = positional[0]
+				rt.Explicit.Local = true
+			} else { // pull
+				rt.Remote = positional[0]
+				rt.Explicit.Remote = true
+			}
 		}
 		if len(positional) >= 2 {
-			rt.Destination = positional[1]
-			rt.Explicit.Destination = true
+			if subcommand == "push" {
+				rt.Remote = positional[1]
+				rt.Explicit.Remote = true
+			} else { // pull
+				rt.Local = positional[1]
+				rt.Explicit.Local = true
+			}
 		}
 	}
 
-	// Validate: push and pull require source and destination
-	// (either from positional args or from config profile)
+	// Validate: push and pull require local and remote
 	config, err := resolveConfig(rt)
 	if err != nil {
 		return err
 	}
 
 	if subcommand == "push" || subcommand == "pull" {
-		if config.Source == "" || config.Destination == "" {
+		if config.Local == "" || config.Remote == "" {
 			if config.ProfileName == "" {
 				return fmt.Errorf(
-					"%s requires <source> <destination>, "+
+					"%s requires <local> <remote>, "+
 						"or a --profile with those values set",
 					subcommand,
 				)
 			}
 			return fmt.Errorf(
-				"profile '%s' is missing source or destination",
+				"profile '%s' is missing local or remote",
 				config.ProfileName,
 			)
 		}
 	}
 
-	if subcommand == "list" && config.Source == "" {
+	if subcommand == "list" && config.Remote == "" {
 		if config.ProfileName == "" {
 			return fmt.Errorf("list requires <path>")
 		}
 		return fmt.Errorf(
-			"profile '%s' is missing source path for list",
+			"profile '%s' is missing remote path for list",
 			config.ProfileName,
 		)
 	}
 
-	// Ensure auth is valid (may trigger browser-based login)
+	// Ensure auth is valid
 	if err := ensureAuth(config); err != nil {
 		return fmt.Errorf("authentication failed: %w", err)
 	}

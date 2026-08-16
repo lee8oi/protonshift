@@ -9,24 +9,14 @@ import (
 )
 
 // batchSize controls how many files are passed to a single
-// proton-drive upload command. Keeping this bounded prevents
+// proton-drive upload/download command. Keeping this bounded prevents
 // EMFILE errors when a single directory contains thousands of files.
 const batchSize = 250
 
 // doPush handles the "push" subcommand — uploading files from
 // a local source to Proton Drive.
-//
-// If the source is a single file, it uploads that file directly.
-// If the source is a directory, it walks the directory tree
-// sequentially (one subdirectory at a time) to avoid exhausting
-// file handles (EMFILE errors). Within each subdirectory, files
-// are uploaded in batches of batchSize to further limit file
-// handle pressure.
-//
-// This sequential + batched approach mirrors and improves upon
-// the original PowerShell script's pattern.
 func doPush(cfg *RuntimeConfig) error {
-	info, err := os.Stat(cfg.Source)
+	info, err := os.Stat(cfg.Local)
 	if err != nil {
 		return fmt.Errorf("cannot access source: %w", err)
 	}
@@ -39,13 +29,11 @@ func doPush(cfg *RuntimeConfig) error {
 
 // pushFile uploads a single file to Proton Drive.
 func pushFile(cfg *RuntimeConfig) error {
-	dest := cfg.Destination
-
-	fmt.Printf("Uploading: %s → %s\n", cfg.Source, dest)
+	fmt.Printf("Uploading: %s → %s\n", cfg.Local, cfg.Remote)
 
 	args := []string{
 		"filesystem", "upload",
-		cfg.Source, dest,
+		cfg.Local, cfg.Remote,
 		"-d", cfg.DirConflict,
 		"-f", cfg.FileConflict,
 	}
@@ -58,8 +46,8 @@ func pushFile(cfg *RuntimeConfig) error {
 // root. Within each directory, if the file count exceeds batchSize,
 // files are split into batches and uploaded as separate commands.
 func pushDirectory(cfg *RuntimeConfig) error {
-	baseLocal := cfg.Source
-	baseRemote := cfg.Destination
+	baseLocal := cfg.Local
+	baseRemote := cfg.Remote
 
 	fmt.Printf("=== Pushing %s → %s ===\n", baseLocal, baseRemote)
 
@@ -155,16 +143,13 @@ func pushSubdirectory(cfg *RuntimeConfig, localPath, remotePath, name string) er
 // files are split into chunks and each chunk is uploaded as a
 // separate proton-drive process. This prevents a single upload
 // command from opening too many file handles at once (EMFILE).
-//
-// Each file is passed as an individual path argument to:
-//
-//	proton-drive filesystem upload <file1> <file2> ... <parentPath>
 func uploadFilesInBatches(cfg *RuntimeConfig, localDir string, files []string, remotePath string) error {
-	// In uploadFilesInBatches
 	total := len(files)
+
 	if total > 0 {
 		fmt.Printf("  Found %d files in %s\n", total, localDir)
 	}
+
 	if total <= batchSize {
 		// Small enough to upload in one shot
 		paths := make([]string, total)
@@ -214,17 +199,19 @@ func uploadFilesInBatches(cfg *RuntimeConfig, localDir string, files []string, r
 }
 
 // doPull handles the "pull" subcommand — downloading files from
-// Proton Drive to a local destination.
+// Proton Drive to a local destination. The proton-drive CLI manages
+// its own download queue and file handle concurrency internally,
+// so no batching or enumeration is needed on our side.
 func doPull(cfg *RuntimeConfig) error {
-	src := cfg.Source
-	dest := cfg.Destination
+	src := cfg.Remote
+	dest := cfg.Local
 
 	// Ensure the local destination directory exists
 	if err := os.MkdirAll(dest, 0755); err != nil {
 		return fmt.Errorf("failed to create destination directory: %w", err)
 	}
 
-	fmt.Printf("Pulling: %s → %s\n", src, dest)
+	fmt.Printf("=== Pulling %s → %s ===\n", src, dest)
 
 	args := []string{
 		"filesystem", "download",
@@ -237,14 +224,14 @@ func doPull(cfg *RuntimeConfig) error {
 		return err
 	}
 
-	fmt.Println("Run complete.")
+	fmt.Println("Pull complete.")
 	return nil
 }
 
 // doList handles the "list" subcommand — listing files and folders
 // on Proton Drive at the given path.
 func doList(cfg *RuntimeConfig) error {
-	path := cfg.Source
+	path := cfg.Remote
 
 	args := []string{
 		"filesystem", "list",
