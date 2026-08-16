@@ -2,17 +2,25 @@
     "defaults": {
         "binary": "./proton-drive.exe",
         "dir_conflict": "merge",
-        "file_conflict": "skip"
+        "file_conflict": "skip",
+        "browser": "C:/Program Files/Firefox/firefox.exe",
+        "verbose": false
     },
     "profiles": {
         "dcim": {
             "source": "D:/DCIM",
-            "destination": "/my-files"
+            "destination": "/my-files",
+            "dir_conflict": "merge",
+            "file_conflict": "skip",
+            "browser": "C:/Program Files/Firefox/firefox.exe",
+            "binary": "./proton-drive.exe",
+            "verbose": false
         },
-        "photos": {
-            "source": "D:/Photos",
-            "destination": "/my-files/Photos",
-            "file_conflict": "overwrite"
+        "projects": {
+            "source": "C:/Users/Lee/Projects",
+            "destination": "/my-files/projects-backup",
+            "file_conflict": "overwrite",
+            "verbose": true
         }
     },
     "default_profile": "dcim"
