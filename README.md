@@ -64,6 +64,10 @@ Download from Proton Drive:
 
     protonshift pull /my-files/docs C:/Users/Lee/Downloads
 
+    Note: If the local destination already exists, the remote folder
+    will be downloaded inside it. To merge into an existing folder,
+    specify the parent directory as the destination.
+
 List remote contents:
 
     protonshift list /my-files
