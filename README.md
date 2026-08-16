@@ -1,10 +1,12 @@
 # ProtonShift
 
-A lightweight Go wrapper around the Proton Drive CLI that handles browser-based authentication and bidirectional file transfers with EMFILE-safe sequential processing.
+> **ProtonShift is an unofficial community tool and is not affiliated with or endorsed by Proton AG.**
+
+A lightweight Go wrapper around the Proton Drive CLI that handles browser-based authentication and bidirectional file transfers with EMFILE-safe sequential processing and intra-directory batch uploads.
 
 ## Overview
 
-ProtonShift wraps the `proton-drive` CLI binary, intercepting its OAuth authentication URL and opening it in your browser of choice, then managing file uploads and downloads with sequential directory processing to avoid Windows EMFILE (too many open files) errors.
+ProtonShift wraps the `proton-drive` CLI binary, intercepting its OAuth authentication URL and opening it in your browser of choice, then managing file uploads and downloads with sequential directory processing and batched file uploads to avoid Windows EMFILE (too many open files) errors.
 
 Built with Go standard library only — no external dependencies.
 
@@ -13,7 +15,9 @@ Built with Go standard library only — no external dependencies.
 - Browser-based auth interception — captures the auth URL from `proton-drive auth login` and opens it in a specified or system-default browser
 - Session reuse — skips auth if a valid session is already stored in the OS credential manager
 - Bidirectional transfers — push (upload) and pull (download) via simple subcommands
-- EMFILE-safe processing — directories are uploaded one subdirectory at a time, each as a fresh process, preserving clean file handle state
+- EMFILE-safe processing — directories are processed one subdirectory at a time, each as a fresh process, preserving clean file handle state
+- Intra-directory batching — large directories are automatically split into batches of 250 files per process, preventing file handle exhaustion within a single directory
+- Recursive subdirectory walking — nested directories are discovered and uploaded as their own remote destinations
 - Dual conflict strategy support — separate directory (`-d`) and file (`-f`) conflict handling passed through to the CLI
 - JSON config profiles — save recurring transfer configurations for repeated use
 - Top-level config defaults — share binary path, conflict strategies, and browser across all profiles
@@ -72,6 +76,10 @@ Use profile with a flag override:
 
     protonshift push --profile dcim --verbose
 
+Use the default profile (no args needed):
+
+    protonshift push
+
 ### Flags
 
     --browser <path>        Browser executable to open auth URL
@@ -129,9 +137,9 @@ Configuration values are resolved in the following order (highest priority first
 |-----------------|-----------------|------------------------------------------|
 | source          | source          | Local path (push) or remote path (pull)  |
 | destination     | destination     | Remote path (push) or local path (pull)  |
-| dir_conflict    | dir_conflict    | Directory conflict strategy               |
+| dir_conflict    | dir_conflict    | Directory conflict strategy              |
 | file_conflict   | file_conflict   | File conflict strategy                   |
-| browser         | browser         | Browser executable path for auth          |
+| browser         | browser         | Browser executable path for auth         |
 | binary          | binary          | Path to proton-drive CLI executable      |
 | verbose         | verbose         | Show raw CLI output (true/false)         |
 
@@ -139,15 +147,48 @@ The `defaults` section accepts all the same fields except `source` and `destinat
 
 ## How EMFILE protection works
 
-On Windows, uploading directories with many files can exhaust available file handles (EMFILE error). ProtonShift avoids this by processing directories sequentially:
+On Windows, uploading directories with many files can exhaust available file handles (EMFILE error). This typically occurs when a single `proton-drive` process attempts to open hundreds or thousands of files simultaneously. ProtonShift prevents this with a two-layer approach:
+
+### Layer 1: Sequential directory processing
 
 1. Enumerate subdirectories in the source path
-2. For each subdirectory, run a single `proton-drive filesystem upload` command for that directory's contents
-3. Each upload runs as a fresh process, ensuring clean file handle state
+2. For each subdirectory, process its contents as a separate operation
+3. Nested subdirectories are discovered recursively and uploaded as their own remote destinations
 4. After subdirectories, upload loose files in the root directory
 5. If a subdirectory fails, the error is logged and processing continues to the next
 
-This mirrors the pattern from the original PowerShell script that inspired the project.
+### Layer 2: Intra-directory batch uploads
+
+Within each directory, if the file count exceeds the batch size (default: 250), files are split into batches:
+
+1. Enumerate all files in the directory
+2. Split into batches of 250 files
+3. Pass individual file paths to each `proton-drive filesystem upload` command
+4. Each batch runs as a fresh process, releasing all file handles before the next batch starts
+5. Failed batches are logged; processing continues to the next batch
+
+Example output for a 2,382-file directory:
+
+    Uploading directory: Camera
+      Found 2382 files in D:/DCIM/Camera
+      2382 files — splitting into 10 batches of 250
+      Batch 1/10 (250 files)...
+      Batch 2/10 (250 files)...
+      ...
+      Batch 10/10 (232 files)...
+    Done: Camera
+
+### Tuning batch size
+
+The batch size is defined as a constant in `upload.go`:
+
+    const batchSize = 250
+
+If EMFILE errors persist on your system, decrease this value. Typical safe ranges:
+
+- 250 — works for most Windows systems
+- 100 — conservative, suitable for systems with lower handle limits
+- 50 — very conservative, use if 100 still triggers EMFILE
 
 ## Project structure
 
@@ -155,9 +196,13 @@ This mirrors the pattern from the original PowerShell script that inspired the p
     ├── main.go                  # Entry point, subcommand dispatch, flag parsing
     ├── config.go                # Config file loading, profile resolution, defaults merging
     ├── auth.go                  # Session check, auth URL interception, browser launch
-    ├── upload.go                # Push/pull/list operations, sequential processing
+    ├── upload.go                # Push/pull/list operations, sequential + batched processing
     ├── go.mod                   # Module definition
     └── protonshift.json.example # Example config file
+
+## Acknowledgments
+
+- Proton AG for the Proton Drive CLI and their broader open-source ecosystem
 
 ## License
 
