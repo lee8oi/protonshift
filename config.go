@@ -255,6 +255,6 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 	if rt.Explicit.Exclude {
 		result.Exclude = rt.Exclude
 	}
-	fmt.Printf("[TRACE] after resolve: FileConflict=%q Explicit.FileConflict=%v\n", result.FileConflict, result.Explicit.FileConflict)
+
 	return result, nil
 }
