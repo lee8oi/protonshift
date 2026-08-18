@@ -29,6 +29,8 @@ Flags:
                          (default: proton-drive, assumes PATH)
   --profile <name>       Use a named profile from config file
   --config <path>        Path to config file (default: searched)
+  --exclude <patterns>   Comma-separated glob patterns to skip
+                         (e.g. "*.tmp,thumbnails/,*.cache")
   --verbose              Show raw proton-drive CLI output
 
 Examples:
@@ -37,7 +39,8 @@ Examples:
   protonshift list /my-files
   protonshift push --profile dcim
   protonshift pull --profile dcim
-  protonshift push D:\DCIM /my-files --dir-conflict merge --file-conflict skip`)
+  protonshift push D:\DCIM /my-files --dir-conflict merge --file-conflict skip
+  protonshift push D:\DCIM /my-files --exclude "*.tmp,thumbnails/"`)
 }
 
 func main() {
@@ -76,7 +79,7 @@ func run(subcommand string, args []string) error {
 		Subcommand: subcommand,
 	}
 
-	var dirConflict, fileConflict, browserPath, protonExe, profile, configPath string
+	var dirConflict, fileConflict, browserPath, protonExe, profile, configPath, exclude string
 	var verbose bool
 
 	fs.StringVar(&dirConflict, "dir-conflict", "", "Directory conflict strategy")
@@ -85,6 +88,7 @@ func run(subcommand string, args []string) error {
 	fs.StringVar(&protonExe, "binary", "", "Path to proton-drive executable")
 	fs.StringVar(&profile, "profile", "", "Named profile from config file")
 	fs.StringVar(&configPath, "config", "", "Path to config file")
+	fs.StringVar(&exclude, "exclude", "", "Comma-separated glob patterns to exclude")
 	fs.BoolVar(&verbose, "verbose", false, "Show raw proton-drive output")
 
 	if err := fs.Parse(args); err != nil {
@@ -101,6 +105,7 @@ func run(subcommand string, args []string) error {
 	rt.ProfileName = profile
 	rt.ConfigPath = configPath
 	rt.Verbose = verbose
+	rt.Exclude = exclude
 
 	// Track explicit flags
 	fs.Visit(func(f *flag.Flag) {
@@ -113,6 +118,8 @@ func run(subcommand string, args []string) error {
 			rt.Explicit.BrowserPath = true
 		case "binary":
 			rt.Explicit.ProtonExe = true
+		case "exclude":
+			rt.Explicit.Exclude = true
 		case "verbose":
 			rt.Explicit.Verbose = true
 		}

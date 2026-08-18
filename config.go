@@ -19,6 +19,7 @@ type Profile struct {
 	BrowserPath  string `json:"browser"`
 	ProtonExe    string `json:"binary"`
 	Verbose      bool   `json:"verbose"`
+	Exclude      string `json:"exclude"`
 }
 
 // ConfigFile represents the on-disk JSON structure containing
@@ -48,6 +49,7 @@ type RuntimeConfig struct {
 	Verbose      bool
 	ConfigPath   string
 	ProfileName  string
+	Exclude      string
 	// Explicit tracks which fields were set via command-line flags.
 	// These take priority over config file values.
 	Explicit explicitFlags
@@ -63,6 +65,7 @@ type explicitFlags struct {
 	BrowserPath  bool
 	ProtonExe    bool
 	Verbose      bool
+	Exclude      bool
 }
 
 // Built-in defaults applied when no config or flag overrides exist.
@@ -173,6 +176,9 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 		if cf.Defaults.Verbose {
 			result.Verbose = cf.Defaults.Verbose
 		}
+		if cf.Defaults.Exclude != "" {
+			result.Exclude = cf.Defaults.Exclude
+		}
 	}
 
 	// Determine which profile to use
@@ -219,6 +225,9 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 		if profile.Verbose {
 			result.Verbose = profile.Verbose
 		}
+		if profile.Exclude != "" {
+			result.Exclude = profile.Exclude
+		}
 	}
 
 	// Layer 3: Apply explicit command-line flags (override everything)
@@ -242,6 +251,9 @@ func resolveConfig(rt *RuntimeConfig) (*RuntimeConfig, error) {
 	}
 	if rt.Explicit.Verbose {
 		result.Verbose = rt.Verbose
+	}
+	if rt.Explicit.Exclude {
+		result.Exclude = rt.Exclude
 	}
 
 	return result, nil

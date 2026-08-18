@@ -47,11 +47,25 @@ func pushFile(cfg *RuntimeConfig) error {
 // each subdirectory sequentially, then handling loose files in the
 // root. Within each directory, if the file count exceeds batchSize,
 // files are split into batches and uploaded as separate commands.
+// Files and directories matching exclusion patterns (.psignore or
+// --exclude flag) are skipped.
 func pushDirectory(cfg *RuntimeConfig) error {
 	baseLocal := cfg.Local
 	baseRemote := cfg.Remote
 
 	fmt.Printf("=== Pushing %s → %s ===\n", baseLocal, baseRemote)
+
+	// Load exclusion patterns: .psignore from source root + --exclude flag
+	ignorePatterns, err := loadIgnoreFile(baseLocal)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: could not read .psignore: %v\n", err)
+	}
+	flagPatterns := parseExcludeFlag(cfg.Exclude)
+	patterns := mergePatterns(flagPatterns, ignorePatterns)
+
+	if len(patterns) > 0 && cfg.Verbose {
+		fmt.Printf("[DEBUG] Exclude patterns: %d active\n", len(patterns))
+	}
 
 	// Create the base remote folder before processing subdirectories.
 	if err := createRemoteFolder(cfg, baseRemote); err != nil {
@@ -68,8 +82,20 @@ func pushDirectory(cfg *RuntimeConfig) error {
 
 	for _, entry := range entries {
 		if entry.IsDir() {
+			if isExcluded(entry.Name(), true, patterns) {
+				if cfg.Verbose {
+					fmt.Printf("  [excluded] %s/\n", entry.Name())
+				}
+				continue
+			}
 			subdirs = append(subdirs, entry.Name())
 		} else {
+			if isExcluded(entry.Name(), false, patterns) {
+				if cfg.Verbose {
+					fmt.Printf("  [excluded] %s\n", entry.Name())
+				}
+				continue
+			}
 			looseFiles = append(looseFiles, entry.Name())
 		}
 	}
@@ -81,7 +107,7 @@ func pushDirectory(cfg *RuntimeConfig) error {
 
 		fmt.Printf("\nUploading directory: %s\n", name)
 
-		if err := pushSubdirectory(cfg, localPath, remotePath, name); err != nil {
+		if err := pushSubdirectory(cfg, localPath, remotePath, name, patterns); err != nil {
 			fmt.Fprintf(os.Stderr, "Errors in: %s (%v)\n", name, err)
 			continue
 		}
@@ -106,7 +132,8 @@ func pushDirectory(cfg *RuntimeConfig) error {
 // It reads the directory, enumerates files (recursing into nested
 // subdirs), and uploads them in batches. Nested subdirectories are
 // handled as their own remote destinations with merge strategy.
-func pushSubdirectory(cfg *RuntimeConfig, localPath, remotePath, name string) error {
+// Exclusion patterns are applied at every level of recursion.
+func pushSubdirectory(cfg *RuntimeConfig, localPath, remotePath, name string, patterns []excludePattern) error {
 	entries, err := os.ReadDir(localPath)
 	if err != nil {
 		return fmt.Errorf("failed to read directory %s: %w", localPath, err)
@@ -117,8 +144,20 @@ func pushSubdirectory(cfg *RuntimeConfig, localPath, remotePath, name string) er
 
 	for _, entry := range entries {
 		if entry.IsDir() {
+			if isExcluded(entry.Name(), true, patterns) {
+				if cfg.Verbose {
+					fmt.Printf("  [excluded] %s/%s/\n", name, entry.Name())
+				}
+				continue
+			}
 			nestedDirs = append(nestedDirs, entry.Name())
 		} else {
+			if isExcluded(entry.Name(), false, patterns) {
+				if cfg.Verbose {
+					fmt.Printf("  [excluded] %s/%s\n", name, entry.Name())
+				}
+				continue
+			}
 			files = append(files, entry.Name())
 		}
 	}
@@ -146,7 +185,7 @@ func pushSubdirectory(cfg *RuntimeConfig, localPath, remotePath, name string) er
 
 		fmt.Printf("  Sub-directory: %s/%s\n", name, nested)
 
-		if err := pushSubdirectory(cfg, nestedLocal, nestedRemote, fmt.Sprintf("%s/%s", name, nested)); err != nil {
+		if err := pushSubdirectory(cfg, nestedLocal, nestedRemote, fmt.Sprintf("%s/%s", name, nested), patterns); err != nil {
 			fmt.Fprintf(os.Stderr, "  Errors in: %s/%s (%v)\n", name, nested, err)
 		}
 	}
@@ -253,7 +292,9 @@ func doPull(cfg *RuntimeConfig) error {
 	src := cfg.Remote
 	dest := cfg.Local
 
-	// Create parent directory only — let proton-drive create the leaf folder
+	// Create parent directory only — let proton-drive create
+	// the leaf folder to avoid nesting when the destination
+	// doesn't already exist.
 	parent := filepath.Dir(dest)
 	if err := os.MkdirAll(parent, 0755); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)

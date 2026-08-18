@@ -15,6 +15,7 @@
             "local": "C:/Users/Lee/Projects",
             "remote": "/my-files/projects-backup",
             "file_conflict": "overwrite",
+            "exclude": "*.tmp,*.log,node_modules/"
             "verbose": true
         }
     },
