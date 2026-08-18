@@ -29,15 +29,14 @@ func doPush(cfg *RuntimeConfig) error {
 	return pushFile(cfg)
 }
 
-// pushFile uploads a single file to Proton Drive.
 func pushFile(cfg *RuntimeConfig) error {
 	fmt.Printf("Uploading: %s → %s\n", cfg.Local, cfg.Remote)
 
 	args := []string{
 		"filesystem", "upload",
-		cfg.Local, cfg.Remote,
 		"-d", cfg.DirConflict,
 		"-f", cfg.FileConflict,
+		cfg.Local, cfg.Remote,
 	}
 
 	return runProtonDrive(cfg, args)
@@ -244,9 +243,11 @@ func uploadFilesInBatches(cfg *RuntimeConfig, localDir string, files []string, r
 		}
 		args := []string{
 			"filesystem", "upload",
+			"-d", cfg.DirConflict,
+			"-f", cfg.FileConflict,
 		}
 		args = append(args, paths...)
-		args = append(args, remotePath, "-d", cfg.DirConflict, "-f", cfg.FileConflict)
+		args = append(args, remotePath)
 
 		return runProtonDrive(cfg, args)
 	}
@@ -271,9 +272,11 @@ func uploadFilesInBatches(cfg *RuntimeConfig, localDir string, files []string, r
 
 		args := []string{
 			"filesystem", "upload",
+			"-d", cfg.DirConflict,
+			"-f", cfg.FileConflict,
 		}
 		args = append(args, paths...)
-		args = append(args, remotePath, "-d", cfg.DirConflict, "-f", cfg.FileConflict)
+		args = append(args, remotePath)
 
 		if err := runProtonDrive(cfg, args); err != nil {
 			fmt.Fprintf(os.Stderr, "  Batch %d failed (%v)\n", batchNum, err)

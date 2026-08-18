@@ -5,7 +5,42 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
 )
+
+// stringFlags is the set of flags that take a value argument.
+var stringFlags = map[string]bool{
+	"--browser":       true,
+	"--dir-conflict":  true,
+	"--file-conflict": true,
+	"--binary":        true,
+	"--profile":       true,
+	"--config":        true,
+	"--exclude":       true,
+}
+
+// separateArgs splits a mixed argument list into flag arguments
+// and positional arguments, allowing flags to appear anywhere in
+// the command line (before or after positional args).
+// This works around Go's flag package, which stops parsing flags
+// at the first non-flag argument.
+func separateArgs(args []string) (flags []string, positionals []string) {
+	for i := 0; i < len(args); i++ {
+		if strings.HasPrefix(args[i], "--") {
+			flags = append(flags, args[i])
+			// If this flag takes a value and one is provided, grab it
+			if stringFlags[args[i]] && i+1 < len(args) {
+				flags = append(flags, args[i+1])
+				i++
+			}
+		} else if strings.HasPrefix(args[i], "-") && args[i] != "-" {
+			flags = append(flags, args[i])
+		} else {
+			positionals = append(positionals, args[i])
+		}
+	}
+	return flags, positionals
+}
 
 // usage prints the help text for protonshift.
 func usage() {
@@ -23,8 +58,10 @@ Subcommands:
 
 Flags:
   --browser <path>       Browser executable to open auth URL
-  --dir-conflict <str>   Directory conflict strategy (default: merge)
-  --file-conflict <str>  File conflict strategy (default: skip)
+  --dir-conflict <str>   Folder conflict strategy: merge, rename,
+                         replace, skip (default: merge)
+  --file-conflict <str>  File conflict strategy: create-new-revision,
+                         rename, replace, skip (default: skip)
   --binary <path>        Path to proton-drive executable
                          (default: proton-drive, assumes PATH)
   --profile <name>       Use a named profile from config file
@@ -91,11 +128,13 @@ func run(subcommand string, args []string) error {
 	fs.StringVar(&exclude, "exclude", "", "Comma-separated glob patterns to exclude")
 	fs.BoolVar(&verbose, "verbose", false, "Show raw proton-drive output")
 
-	if err := fs.Parse(args); err != nil {
+	// Separate flags from positional args so flags can appear
+	// anywhere in the command line (before or after paths).
+	flagArgs, positional := separateArgs(args)
+
+	if err := fs.Parse(flagArgs); err != nil {
 		return err
 	}
-
-	positional := fs.Args()
 
 	// Map parsed flags into RuntimeConfig and track which were explicit
 	rt.DirConflict = dirConflict
